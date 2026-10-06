@@ -153,8 +153,9 @@ export const recentlyPlayed = mysqlTable("recently_played", {
   id: int("id").autoincrement().primaryKey(),
   licenseId: int("licenseId").notNull().references(() => licenses.id),
   contentId: int("contentId").notNull().references(() => contentItems.id),
+  positionSeconds: int("positionSeconds").default(0).notNull(),
   playedAt: timestamp("playedAt").defaultNow().notNull(),
-}, table => ({ recentIdx: index("recent_license_idx").on(table.licenseId, table.playedAt) }));
+}, table => ({ recentIdx: index("recent_license_idx").on(table.licenseId, table.playedAt), recentContentIdx: uniqueIndex("recent_license_content_idx").on(table.licenseId, table.contentId) }));
 
 export const auditLogs = mysqlTable("audit_logs", {
   id: int("id").autoincrement().primaryKey(),

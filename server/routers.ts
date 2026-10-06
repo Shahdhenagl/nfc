@@ -6,10 +6,12 @@ import {
   contentItems,
   deviceRegistrations,
   deviceResetRequests,
+  favorites,
   licenses,
   loginAttempts,
   nfcCards,
   products,
+  recentlyPlayed,
   users,
 } from "../drizzle/schema";
 import { getDb } from "./db";
@@ -39,6 +41,8 @@ const DEMO_CARDS = {
   "SH-DEMO01": { id: 4, cardId: 4, licenseId: 4, productId: 4, slug: "shaabi" as const, password: "demo1234", nfcCode: "SH-DEMO01", name: "Shaabi Music", status: "active" as const },
 };
 const demoDeviceByLicense = new Map<number, string>();
+const demoFavoritesByLicense = new Map<number, Set<number>>();
+const demoProgressByLicense = new Map<number, Map<number, number>>();
 
 function demoCard(token: string) {
   return Object.values(DEMO_CARDS).find(card => token.toUpperCase() === card.nfcCode || token === card.slug);
@@ -162,11 +166,73 @@ const accessRouter = router({
     const session = getAccessSession(ctx.req);
     if (!session) throw new TRPCError({ code: "UNAUTHORIZED", message: "Your NFC session has expired." });
     const db = await getDb();
-    if (!db) return { session, product: PRODUCT_META[Object.values(DEMO_CARDS).find(card => card.productId === session.productId)?.slug || "foreign"], items: contentFor(Object.values(DEMO_CARDS).find(card => card.productId === session.productId)?.slug || "foreign") };
+    if (!db) {
+      const slug = Object.values(DEMO_CARDS).find(card => card.productId === session.productId)?.slug || "foreign";
+      const favoriteIds = [...(demoFavoritesByLicense.get(session.licenseId) || new Set<number>())];
+      const progress = demoProgressByLicense.get(session.licenseId) || new Map<number, number>();
+      return { session, product: PRODUCT_META[slug], items: contentFor(slug), favoriteIds, recentlyPlayed: [...progress.entries()].map(([contentId, positionSeconds]) => ({ contentId, positionSeconds, playedAt: new Date() })) };
+    }
     const product = await db.select().from(products).where(eq(products.id, session.productId)).limit(1);
     if (!product[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Product not found." });
     const items = await db.select().from(contentItems).where(and(eq(contentItems.productId, session.productId), eq(contentItems.status, "published"))).orderBy(contentItems.sortOrder, desc(contentItems.createdAt));
-    return { session, product: { ...product[0], meta: PRODUCT_META[product[0].slug as keyof typeof PRODUCT_META] }, items };
+    const favoriteRows = await db.select({ contentId: favorites.contentId }).from(favorites).where(eq(favorites.licenseId, session.licenseId));
+    const recentRows = await db.select({ contentId: recentlyPlayed.contentId, positionSeconds: recentlyPlayed.positionSeconds, playedAt: recentlyPlayed.playedAt }).from(recentlyPlayed).where(eq(recentlyPlayed.licenseId, session.licenseId)).orderBy(desc(recentlyPlayed.playedAt)).limit(20);
+    return { session, product: { ...product[0], meta: PRODUCT_META[product[0].slug as keyof typeof PRODUCT_META] }, items, favoriteIds: favoriteRows.map(row => row.contentId), recentlyPlayed: recentRows };
+  }),
+  toggleFavorite: publicProcedure.input(z.object({ contentId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    const session = getAccessSession(ctx.req);
+    if (!session) throw new TRPCError({ code: "UNAUTHORIZED", message: "Your NFC session has expired." });
+    const db = await getDb();
+    if (!db) {
+      const favoriteIds = demoFavoritesByLicense.get(session.licenseId) || new Set<number>();
+      const isFavorite = favoriteIds.has(input.contentId);
+      if (isFavorite) favoriteIds.delete(input.contentId); else favoriteIds.add(input.contentId);
+      demoFavoritesByLicense.set(session.licenseId, favoriteIds);
+      return { isFavorite: !isFavorite };
+    }
+    const content = await db.select({ id: contentItems.id }).from(contentItems).where(and(eq(contentItems.id, input.contentId), eq(contentItems.productId, session.productId))).limit(1);
+    if (!content[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Content is not part of this product." });
+    const existing = await db.select({ id: favorites.id }).from(favorites).where(and(eq(favorites.licenseId, session.licenseId), eq(favorites.contentId, input.contentId))).limit(1);
+    if (existing[0]) { await db.delete(favorites).where(eq(favorites.id, existing[0].id)); return { isFavorite: false }; }
+    await db.insert(favorites).values({ licenseId: session.licenseId, contentId: input.contentId });
+    return { isFavorite: true };
+  }),
+  recordProgress: publicProcedure.input(z.object({ contentId: z.number().int().positive(), positionSeconds: z.number().int().min(0).max(86400) })).mutation(async ({ ctx, input }) => {
+    const session = getAccessSession(ctx.req);
+    if (!session) throw new TRPCError({ code: "UNAUTHORIZED", message: "Your NFC session has expired." });
+    const db = await getDb();
+    if (!db) {
+      const progress = demoProgressByLicense.get(session.licenseId) || new Map<number, number>();
+      progress.set(input.contentId, input.positionSeconds);
+      demoProgressByLicense.set(session.licenseId, progress);
+      return { ok: true };
+    }
+    const content = await db.select({ id: contentItems.id }).from(contentItems).where(and(eq(contentItems.id, input.contentId), eq(contentItems.productId, session.productId))).limit(1);
+    if (!content[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Content is not part of this product." });
+    const existing = await db.select({ id: recentlyPlayed.id }).from(recentlyPlayed).where(and(eq(recentlyPlayed.licenseId, session.licenseId), eq(recentlyPlayed.contentId, input.contentId))).limit(1);
+    if (existing[0]) await db.update(recentlyPlayed).set({ positionSeconds: input.positionSeconds, playedAt: new Date() }).where(eq(recentlyPlayed.id, existing[0].id));
+    else await db.insert(recentlyPlayed).values({ licenseId: session.licenseId, contentId: input.contentId, positionSeconds: input.positionSeconds });
+    return { ok: true };
+  }),
+  myCard: publicProcedure.query(async ({ ctx }) => {
+    const session = getAccessSession(ctx.req);
+    if (!session) throw new TRPCError({ code: "UNAUTHORIZED", message: "Your NFC session has expired." });
+    const db = await getDb();
+    if (!db) return { product: PRODUCT_META[Object.values(DEMO_CARDS).find(card => card.productId === session.productId)?.slug || "foreign"], license: { status: "active", activatedAt: new Date(), expiresAt: null }, device: { status: "active", browser: "Your current browser", operatingSystem: "Your current device", lastSeenAt: new Date() } };
+    const row = await db.select({ card: nfcCards, license: licenses, product: products }).from(nfcCards).innerJoin(licenses, eq(nfcCards.licenseId, licenses.id)).innerJoin(products, eq(nfcCards.productId, products.id)).where(eq(nfcCards.id, session.cardId)).limit(1);
+    if (!row[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Card record not found." });
+    const device = await db.select().from(deviceRegistrations).where(and(eq(deviceRegistrations.licenseId, session.licenseId), eq(deviceRegistrations.deviceTokenHash, session.deviceTokenHash))).limit(1);
+    return { ...row[0], device: device[0] || null };
+  }),
+  requestDeviceReset: publicProcedure.input(z.object({ reason: z.string().trim().max(500).optional() })).mutation(async ({ ctx, input }) => {
+    const session = getAccessSession(ctx.req);
+    if (!session) throw new TRPCError({ code: "UNAUTHORIZED", message: "Your NFC session has expired." });
+    const db = await getDb();
+    if (!db) return { ok: true, status: "pending" };
+    const device = await db.select({ id: deviceRegistrations.id }).from(deviceRegistrations).where(and(eq(deviceRegistrations.licenseId, session.licenseId), eq(deviceRegistrations.deviceTokenHash, session.deviceTokenHash))).limit(1);
+    const existing = await db.select({ id: deviceResetRequests.id }).from(deviceResetRequests).where(and(eq(deviceResetRequests.licenseId, session.licenseId), eq(deviceResetRequests.status, "pending"))).limit(1);
+    if (!existing.length) await db.insert(deviceResetRequests).values({ licenseId: session.licenseId, cardId: session.cardId, deviceId: device[0]?.id, requestedBy: getClientSignals(ctx.req).ip, reason: input.reason || "Customer requested a device change" });
+    return { ok: true, status: "pending" };
   }),
   logout: publicProcedure.mutation(({ ctx }) => { clearAccessCookies(ctx.req, ctx.res); return { ok: true }; }),
 });

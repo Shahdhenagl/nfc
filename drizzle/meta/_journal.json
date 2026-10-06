@@ -15,6 +15,13 @@
       "when": 1791257496302,
       "tag": "0001_fuzzy_the_fallen",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1791258276041,
+      "tag": "0002_cuddly_colleen_wing",
+      "breakpoints": true
     }
   ]
 }

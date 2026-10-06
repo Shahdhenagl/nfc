@@ -1,0 +1,2 @@
+ALTER TABLE `recently_played` ADD `positionSeconds` int DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE `recently_played` ADD CONSTRAINT `recent_license_content_idx` UNIQUE(`licenseId`,`contentId`);
