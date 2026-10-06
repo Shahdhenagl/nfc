@@ -39,10 +39,15 @@ async function seed() {
       const inserted = await db.insert(products).values({ slug, name: meta.name, type: meta.type, description: meta.description, status: "active" }).$returningId();
       productId = inserted[0].id;
     }
-    const existing = await db.select({ id: contentItems.id }).from(contentItems).where(eq(contentItems.productId, productId)).limit(1);
+    const existing = await db.select().from(contentItems).where(eq(contentItems.productId, productId)).orderBy(contentItems.sortOrder);
+    const mediaUrlFor = (index: number) => slug === "quran" && index < 2
+      ? `https://cdn.islamic.network/quran/audio/128/ar.alafasy/${index + 1}.mp3`
+      : `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-${(index % 3) + 1}.mp3`;
     if (!existing.length) {
-      const rows = (samples[slug as keyof typeof samples] || []).map(([contentType, titleEn, titleAr, artistOrReciter, albumOrCategory], index) => ({ productId, contentType, titleEn, titleAr, artistOrReciter, albumOrCategory, status: "published" as const, sortOrder: index }));
+      const rows = (samples[slug as keyof typeof samples] || []).map(([contentType, titleEn, titleAr, artistOrReciter, albumOrCategory], index) => ({ productId, contentType, titleEn, titleAr, artistOrReciter, albumOrCategory, status: "published" as const, sortOrder: index, mediaUrl: mediaUrlFor(index), durationSeconds: 210 + index * 18 }));
       if (rows.length) await db.insert(contentItems).values(rows);
+    } else {
+      for (const [index, item] of existing.entries()) await db.update(contentItems).set({ mediaUrl: item.mediaUrl || mediaUrlFor(index), durationSeconds: item.durationSeconds || 210 + index * 18 }).where(eq(contentItems.id, item.id));
     }
     const demoPrefix = slug === "foreign" ? "FR" : slug === "quran" ? "QN" : slug === "arabic" ? "AR" : "SH";
     const licenseKey = `${slug.toUpperCase()}-DEMO`;

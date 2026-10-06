@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, Bell, BookOpen, Check, ChevronRight, Clock3, Heart, ListMusic, LogOut, Menu, MoreHorizontal, Pause, Play, Repeat2, Search, Settings2, ShieldCheck, Shuffle, Smartphone, Sparkles, Volume2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 
@@ -23,6 +23,8 @@ export default function LibraryPage() {
   const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
   const [sleepTimer, setSleepTimer] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
+  const [audioError, setAudioError] = useState("");
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   const data = library.data;
   const items = data?.items || [];
@@ -51,6 +53,23 @@ export default function LibraryPage() {
     const timer = window.setTimeout(() => setPlaying(false), sleepTimer * 60 * 1000);
     return () => window.clearTimeout(timer);
   }, [sleepTimer, playing]);
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !active?.mediaUrl) return;
+    setAudioError("");
+    audio.src = active.mediaUrl;
+    audio.load();
+    audio.currentTime = position;
+    const start = () => { if (playing) audio.play().catch(() => setAudioError("اضغط تشغيل للسماح بالصوت من المتصفح.")); };
+    audio.addEventListener("canplay", start);
+    return () => { audio.pause(); audio.removeEventListener("canplay", start); };
+  }, [active?.id]);
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !active?.mediaUrl) return;
+    if (playing) audio.play().catch(() => setAudioError("اضغط تشغيل للسماح بالصوت من المتصفح."));
+    else audio.pause();
+  }, [playing, active?.id]);
 
   if (library.isLoading) return <div className="center-state dark-state"><div className="loader" /><span>Preparing your private shelf…</span></div>;
   if (library.error || !data) return <div className="center-state"><ShieldCheck size={34} /><h2>Your session needs a fresh tap</h2><p>{library.error?.message || "Activate your NFC card to open this library."}</p><Link className="button button-dark" href="/">Return to cards</Link></div>;
@@ -87,6 +106,8 @@ export default function LibraryPage() {
       {showSettings && <div className="settings-drawer"><div><span className="eyebrow">LISTENING SETTINGS</span><h3>{isQuran ? "إعدادات الاستماع" : "Make it yours"}</h3></div><label><span>Sleep timer</span><select value={sleepTimer} onChange={event => setSleepTimer(Number(event.target.value))}><option value={0}>Off</option><option value={15}>15 minutes</option><option value={30}>30 minutes</option><option value={45}>45 minutes</option><option value={60}>60 minutes</option></select></label><label><span>Playback</span><button className="mode-select" onClick={cycleMode}>{modeLabel(playMode)} <Repeat2 size={14} /></button></label>{isQuran && <label><span>Preferred reciter</span><button className="mode-select">Mishary Alafasy <ChevronRight size={14} /></button></label>}</div>}
       {isQuran ? <QuranContent items={items} activeId={active?.id || null} setActiveId={(id) => selectItem(items.find((item: any) => item.id === id), true)} playing={playing} setPlaying={setPlaying} favoriteIds={favoriteIds} onFavorite={toggleFavorite} favoriteItems={favoriteItems} onPlayFavorites={startFavoritePlaylist} /> : <MusicContent items={items} activeId={active?.id || null} setActiveId={(id) => selectItem(items.find((item: any) => item.id === id), true)} playing={playing} setPlaying={setPlaying} favoriteIds={favoriteIds} onFavorite={toggleFavorite} favoriteItems={favoriteItems} onPlayFavorites={startFavoritePlaylist} />}
       <section id="my-card" className="my-card-panel"><div><div className="eyebrow">MY CARD</div><h2>Your personal digital license</h2><p>One product, one license and one trusted device. Your IP can change; your ownership stays yours.</p></div><div className="my-card-facts"><span><small>PRODUCT</small><strong>{data.product.name}</strong></span><span><small>LICENSE STATUS</small><strong className="fact-active"><i /> Active</strong></span><span><small>DEVICE</small><strong>{myCard.data?.device?.operatingSystem || "This device"}</strong></span><button className="reset-link" onClick={() => resetDevice.mutate({ reason: "Customer requested a device change" })}>{resetDevice.isSuccess ? "Request sent" : "Request device reset"} <ArrowLeft size={14} /></button></div></section>
+      {audioError && <div className="audio-error"><ShieldCheck size={14} />{audioError}</div>}
+      <audio ref={audioRef} preload="metadata" onTimeUpdate={event => setPosition(Math.floor(event.currentTarget.currentTime))} onEnded={nextItem} onError={() => setAudioError("ملف الصوت غير متاح حاليًا لهذا المحتوى.")} />
       {active && <div className="player-bar"><div className="player-art" style={{ backgroundImage: `url(${active.coverImage || "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=200&q=70"})` }} /><div className="player-title"><strong>{active.titleAr || active.titleEn}</strong><span>{active.artistOrReciter || active.subtitle}</span></div><div className="player-controls"><button className="player-secondary" aria-label="Toggle playback mode" onClick={cycleMode}>{playMode === "shuffle" ? <Shuffle size={15} /> : playMode === "repeat" ? <Repeat2 size={15} /> : <ArrowRight size={15} />}</button><button onClick={() => setPlaying(!playing)} className="play-button">{playing ? <Pause size={17} /> : <Play size={17} fill="currentColor" />}</button><button className="player-secondary" aria-label="Next track" onClick={nextItem}><ArrowRight size={15} /></button><div className="player-progress"><span style={{ width: `${Math.min(100, Math.max(8, (position / Math.max(1, active.durationSeconds || 1)) * 100))}%` }} /></div><span className="player-time">{formatTime(position)} / {formatTime(active.durationSeconds || 0)}</span><Volume2 size={17} /></div></div>}
       <nav className="mobile-library-nav"><a className="active" href="#home"><span className="nav-dot" />Home</a><a href="#favorites"><Heart size={17} /><span>Favorites</span></a><a href="#playlists"><ListMusic size={17} /><span>Playlist</span></a><a href="#my-card"><Smartphone size={17} /><span>My card</span></a></nav>
     </div>
