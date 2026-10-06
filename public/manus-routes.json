@@ -1,0 +1,16 @@
+{
+  "routes": [
+    { "path": "/", "title": "NFC Digital Content Platform" },
+    { "path": "/access/:accessToken", "title": "Activate your NFC card" },
+    { "path": "/library", "title": "Your private library" },
+    { "path": "/admin", "title": "Admin dashboard" },
+    { "path": "/admin/products", "title": "Products" },
+    { "path": "/admin/content", "title": "Content library" },
+    { "path": "/admin/licenses", "title": "Licenses" },
+    { "path": "/admin/cards", "title": "NFC cards" },
+    { "path": "/admin/users", "title": "Users" },
+    { "path": "/admin/devices", "title": "Device reset requests" },
+    { "path": "/admin/audit", "title": "Audit log" },
+    { "path": "/404", "title": "Not found" }
+  ]
+}
