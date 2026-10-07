@@ -33,6 +33,7 @@ import { accessTokenSchema, contentTypeSchema, passwordSchema, productSlugSchema
 import { adminProcedure, publicProcedure, router } from "./_core/trpc";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { COOKIE_NAME } from "@shared/const";
+import { getAudiusCatalog, syncAudiusContent } from "./audius";
 
 const DEMO_CARDS = {
   "FR-DEMO01": { id: 1, cardId: 1, licenseId: 1, productId: 1, slug: "foreign" as const, password: "demo1234", nfcCode: "FR-DEMO01", name: "Foreign Music", status: "active" as const },
@@ -170,11 +171,14 @@ const accessRouter = router({
       const slug = Object.values(DEMO_CARDS).find(card => card.productId === session.productId)?.slug || "foreign";
       const favoriteIds = [...(demoFavoritesByLicense.get(session.licenseId) || new Set<number>())];
       const progress = demoProgressByLicense.get(session.licenseId) || new Map<number, number>();
-      return { session, product: PRODUCT_META[slug], items: contentFor(slug), favoriteIds, recentlyPlayed: [...progress.entries()].map(([contentId, positionSeconds]) => ({ contentId, positionSeconds, playedAt: new Date() })) };
+      const audiusItems = await getAudiusCatalog(slug);
+      return { session, product: PRODUCT_META[slug], items: [...contentFor(slug), ...audiusItems], favoriteIds, recentlyPlayed: [...progress.entries()].map(([contentId, positionSeconds]) => ({ contentId, positionSeconds, playedAt: new Date() })) };
     }
     const product = await db.select().from(products).where(eq(products.id, session.productId)).limit(1);
     if (!product[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Product not found." });
-    const items = await db.select().from(contentItems).where(and(eq(contentItems.productId, session.productId), eq(contentItems.status, "published"))).orderBy(contentItems.sortOrder, desc(contentItems.createdAt));
+    const storedItems = await db.select().from(contentItems).where(and(eq(contentItems.productId, session.productId), eq(contentItems.status, "published"))).orderBy(contentItems.sortOrder, desc(contentItems.createdAt));
+    const audiusTracks = await getAudiusCatalog(product[0].slug);
+    const items = product[0].type === "music" ? [...storedItems, ...(await syncAudiusContent(db, session.productId, audiusTracks))] : storedItems;
     const favoriteRows = await db.select({ contentId: favorites.contentId }).from(favorites).where(eq(favorites.licenseId, session.licenseId));
     const recentRows = await db.select({ contentId: recentlyPlayed.contentId, positionSeconds: recentlyPlayed.positionSeconds, playedAt: recentlyPlayed.playedAt }).from(recentlyPlayed).where(eq(recentlyPlayed.licenseId, session.licenseId)).orderBy(desc(recentlyPlayed.playedAt)).limit(20);
     return { session, product: { ...product[0], meta: PRODUCT_META[product[0].slug as keyof typeof PRODUCT_META] }, items, favoriteIds: favoriteRows.map(row => row.contentId), recentlyPlayed: recentRows };

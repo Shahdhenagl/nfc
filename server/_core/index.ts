@@ -7,6 +7,7 @@ import { publicPlatformScript } from "./publicConfig";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { streamAudiusTrack } from "../audius";
 
 async function startServer() {
   const app = express();
@@ -17,6 +18,14 @@ async function startServer() {
   app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
   app.get("/api/platform/config.js", (_req, res) => {
     res.set("Cache-Control", "no-store").type("application/javascript").send(publicPlatformScript());
+  });
+  app.get("/api/audius/stream/:trackId", async (req, res) => {
+    try {
+      const streamed = await streamAudiusTrack(req.params.trackId, res);
+      if (!streamed && !res.headersSent) res.status(404).json({ error: "Audius track unavailable" });
+    } catch (error) {
+      if (!res.headersSent) res.status(502).json({ error: "Audius stream unavailable" });
+    }
   });
   registerOAuthRoutes(app);
   // tRPC API
