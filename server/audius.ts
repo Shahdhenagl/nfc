@@ -65,10 +65,10 @@ export async function getAudiusCatalog(productSlug: string, query?: string) {
   const cached = cache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
   try {
-    const result = await audiusRequest(`tracks/search?query=${encodeURIComponent(searchQuery)}&limit=24&offset=0`);
+    const result = await audiusRequest(`tracks/search?query=${encodeURIComponent(searchQuery)}&limit=50&offset=0`);
     let tracks = (result?.data || []).map(normalizeTrack).filter(Boolean) as AudiusTrack[];
     if (!tracks.length) {
-      const fallback = await audiusRequest("tracks/trending?limit=24");
+      const fallback = await audiusRequest("tracks/trending?limit=50");
       tracks = (fallback?.data || []).map(normalizeTrack).filter(Boolean) as AudiusTrack[];
     }
     cache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, value: tracks });

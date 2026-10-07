@@ -185,6 +185,21 @@ const accessRouter = router({
     const recentRows = await db.select({ contentId: recentlyPlayed.contentId, positionSeconds: recentlyPlayed.positionSeconds, playedAt: recentlyPlayed.playedAt }).from(recentlyPlayed).where(eq(recentlyPlayed.licenseId, session.licenseId)).orderBy(desc(recentlyPlayed.playedAt)).limit(20);
     return { session, product: { ...product[0], meta: PRODUCT_META[product[0].slug as keyof typeof PRODUCT_META] }, items, favoriteIds: favoriteRows.map(row => row.contentId), recentlyPlayed: recentRows };
   }),
+  searchLibrary: publicProcedure.input(z.object({ query: z.string().trim().min(2).max(120) })).query(async ({ ctx, input }) => {
+    const session = getAccessSession(ctx.req);
+    if (!session) throw new TRPCError({ code: "UNAUTHORIZED", message: "انتهت جلسة بطاقة NFC الخاصة بك." });
+    const db = await getDb();
+    if (!db) {
+      const slug = Object.values(DEMO_CARDS).find(card => card.productId === session.productId)?.slug || "foreign";
+      const local = contentFor(slug).filter((item: any) => `${item.titleAr} ${item.titleEn} ${item.artistOrReciter} ${item.albumOrCategory}`.toLowerCase().includes(input.query.toLowerCase()));
+      return { items: [...local, ...(await getAudiusCatalog(slug, input.query))] };
+    }
+    const product = await db.select().from(products).where(eq(products.id, session.productId)).limit(1);
+    if (!product[0]) throw new TRPCError({ code: "NOT_FOUND", message: "المنتج غير موجود." });
+    const local = await db.select().from(contentItems).where(and(eq(contentItems.productId, session.productId), eq(contentItems.status, "published"), sql`LOWER(CONCAT(COALESCE(${contentItems.titleAr}, ''), ' ', COALESCE(${contentItems.titleEn}, ''), ' ', COALESCE(${contentItems.artistOrReciter}, ''), ' ', COALESCE(${contentItems.albumOrCategory}, ''))) LIKE ${`%${input.query.toLowerCase()}%`}`)).limit(50);
+    const audiusTracks = product[0].type === "music" ? await getAudiusCatalog(product[0].slug, input.query) : [];
+    return { items: [...local, ...(await syncAudiusContent(db, session.productId, audiusTracks))] };
+  }),
   toggleFavorite: publicProcedure.input(z.object({ contentId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
     const session = getAccessSession(ctx.req);
     if (!session) throw new TRPCError({ code: "UNAUTHORIZED", message: "Your NFC session has expired." });
