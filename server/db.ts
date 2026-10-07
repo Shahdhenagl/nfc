@@ -43,3 +43,13 @@ export async function getUserByOpenId(openId: string) {
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
   return result[0];
 }
+
+/** The first authenticated Manus account owns this single-owner project. */
+export async function ensureInitialAdmin(openId: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const existingAdmin = await db.select({ id: users.id }).from(users).where(eq(users.role, "super_admin")).limit(1);
+  if (!existingAdmin.length) {
+    await db.update(users).set({ role: "super_admin" }).where(eq(users.openId, openId));
+  }
+}
