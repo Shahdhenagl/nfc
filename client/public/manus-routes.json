@@ -1,16 +1,16 @@
 {
   "routes": [
-    { "path": "/", "title": "NFC Digital Content Platform" },
-    { "path": "/access/:accessToken", "title": "Activate your NFC card" },
-    { "path": "/library", "title": "Your private library" },
-    { "path": "/admin", "title": "Admin dashboard" },
-    { "path": "/admin/products", "title": "Products" },
-    { "path": "/admin/content", "title": "Content library" },
-    { "path": "/admin/licenses", "title": "Licenses" },
-    { "path": "/admin/cards", "title": "NFC cards" },
-    { "path": "/admin/users", "title": "Users" },
-    { "path": "/admin/devices", "title": "Device reset requests" },
-    { "path": "/admin/audit", "title": "Audit log" },
-    { "path": "/404", "title": "Not found" }
+    { "path": "/", "title": "منصة محتوى NFC الرقمية" },
+    { "path": "/access/:accessToken", "title": "تفعيل بطاقة NFC" },
+    { "path": "/library", "title": "مكتبتك الخاصة" },
+    { "path": "/admin", "title": "لوحة الإدارة" },
+    { "path": "/admin/products", "title": "المنتجات" },
+    { "path": "/admin/content", "title": "مكتبة المحتوى" },
+    { "path": "/admin/licenses", "title": "التراخيص" },
+    { "path": "/admin/cards", "title": "بطاقات NFC" },
+    { "path": "/admin/users", "title": "العملاء والمستخدمون" },
+    { "path": "/admin/devices", "title": "طلبات تغيير الجهاز" },
+    { "path": "/admin/audit", "title": "سجل المراجعة" },
+    { "path": "/404", "title": "الصفحة غير موجودة" }
   ]
 }
