@@ -21,7 +21,7 @@ async function startServer() {
   });
   app.get("/api/audius/stream/:trackId", async (req, res) => {
     try {
-      const streamed = await streamAudiusTrack(req.params.trackId, res);
+      const streamed = await streamAudiusTrack(req.params.trackId, req, res);
       if (!streamed && !res.headersSent) res.status(404).json({ error: "Audius track unavailable" });
     } catch (error) {
       if (!res.headersSent) res.status(502).json({ error: "Audius stream unavailable" });

@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import { and, eq, sql } from "drizzle-orm";
 import { contentItems } from "../drizzle/schema";
 
@@ -108,8 +109,19 @@ export async function syncAudiusContent(db: any, productId: number, tracks: Audi
   return synced;
 }
 
-export async function streamAudiusTrack(trackId: string, res: any) {
+export async function streamAudiusTrack(trackId: string, req: any, res: any) {
   if (!/^[A-Za-z0-9_-]+$/.test(trackId)) return false;
-  res.redirect(302, `${AUDIUS_BASE}/tracks/${trackId}/stream?app_name=nfc-vault`);
+  const headers: Record<string, string> = { Accept: "audio/mpeg" };
+  if (req.headers.range) headers.Range = req.headers.range;
+  if (apiKey()) headers.Authorization = `Bearer ${apiKey()}`;
+  const response = await fetch(`${AUDIUS_BASE}/tracks/${trackId}/stream?app_name=nfc-vault`, { headers, redirect: "follow", signal: AbortSignal.timeout(30_000) });
+  if (!response.ok || !response.body) return false;
+  res.status(response.status);
+  for (const header of ["content-type", "content-length", "content-range", "accept-ranges"]) {
+    const value = response.headers.get(header);
+    if (value) res.setHeader(header, value);
+  }
+  res.setHeader("Cache-Control", "private, max-age=300");
+  Readable.fromWeb(response.body as any).pipe(res);
   return true;
 }

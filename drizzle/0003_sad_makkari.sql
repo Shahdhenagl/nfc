@@ -1,0 +1,2 @@
+ALTER TABLE `playlists` ADD `licenseId` int NOT NULL;--> statement-breakpoint
+ALTER TABLE `playlists` ADD CONSTRAINT `playlists_licenseId_licenses_id_fk` FOREIGN KEY (`licenseId`) REFERENCES `licenses`(`id`) ON DELETE no action ON UPDATE no action;

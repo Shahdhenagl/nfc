@@ -127,6 +127,7 @@ export const contentItems = mysqlTable("content_items", {
 
 export const playlists = mysqlTable("playlists", {
   id: int("id").autoincrement().primaryKey(),
+  licenseId: int("licenseId").notNull().references(() => licenses.id),
   productId: int("productId").notNull().references(() => products.id),
   nameEn: varchar("nameEn", { length: 180 }).notNull(),
   nameAr: varchar("nameAr", { length: 180 }),

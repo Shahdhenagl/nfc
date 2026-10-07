@@ -10,6 +10,8 @@ import {
   licenses,
   loginAttempts,
   nfcCards,
+  playlistItems,
+  playlists,
   products,
   recentlyPlayed,
   users,
@@ -216,6 +218,58 @@ const accessRouter = router({
     const existing = await db.select({ id: recentlyPlayed.id }).from(recentlyPlayed).where(and(eq(recentlyPlayed.licenseId, session.licenseId), eq(recentlyPlayed.contentId, input.contentId))).limit(1);
     if (existing[0]) await db.update(recentlyPlayed).set({ positionSeconds: input.positionSeconds, playedAt: new Date() }).where(eq(recentlyPlayed.id, existing[0].id));
     else await db.insert(recentlyPlayed).values({ licenseId: session.licenseId, contentId: input.contentId, positionSeconds: input.positionSeconds });
+    return { ok: true };
+  }),
+  playlists: publicProcedure.query(async ({ ctx }) => {
+    const session = getAccessSession(ctx.req);
+    if (!session) throw new TRPCError({ code: "UNAUTHORIZED", message: "Your NFC session has expired." });
+    const db = await getDb();
+    if (!db) return [];
+    const rows = await db.select().from(playlists).where(and(eq(playlists.licenseId, session.licenseId), eq(playlists.productId, session.productId))).orderBy(desc(playlists.createdAt));
+    return Promise.all(rows.map(async playlist => {
+      const rowsWithContent = await db.select({ content: contentItems }).from(playlistItems).innerJoin(contentItems, eq(playlistItems.contentId, contentItems.id)).where(eq(playlistItems.playlistId, playlist.id)).orderBy(playlistItems.sortOrder, playlistItems.id);
+      return { ...playlist, items: rowsWithContent.map(row => row.content) };
+    }));
+  }),
+  createPlaylist: publicProcedure.input(z.object({ name: z.string().trim().min(1).max(120), description: z.string().trim().max(300).optional() })).mutation(async ({ ctx, input }) => {
+    const session = getAccessSession(ctx.req);
+    if (!session) throw new TRPCError({ code: "UNAUTHORIZED", message: "Your NFC session has expired." });
+    const db = await getDb();
+    if (!db) return { ok: true, playlist: { id: Date.now(), nameEn: input.name, nameAr: input.name, items: [] } };
+    const inserted = await db.insert(playlists).values({ licenseId: session.licenseId, productId: session.productId, nameEn: input.name, nameAr: input.name, description: input.description }).$returningId();
+    return { ok: true, playlist: { id: inserted[0]?.id, nameEn: input.name, nameAr: input.name, items: [] } };
+  }),
+  addToPlaylist: publicProcedure.input(z.object({ playlistId: z.number().int().positive(), contentId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    const session = getAccessSession(ctx.req);
+    if (!session) throw new TRPCError({ code: "UNAUTHORIZED", message: "Your NFC session has expired." });
+    const db = await getDb();
+    if (!db) return { ok: true };
+    const playlist = await db.select({ id: playlists.id }).from(playlists).where(and(eq(playlists.id, input.playlistId), eq(playlists.licenseId, session.licenseId), eq(playlists.productId, session.productId))).limit(1);
+    const content = await db.select({ id: contentItems.id }).from(contentItems).where(and(eq(contentItems.id, input.contentId), eq(contentItems.productId, session.productId))).limit(1);
+    if (!playlist[0] || !content[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Playlist or content not found." });
+    const existing = await db.select({ id: playlistItems.id }).from(playlistItems).where(and(eq(playlistItems.playlistId, input.playlistId), eq(playlistItems.contentId, input.contentId))).limit(1);
+    if (!existing[0]) await db.insert(playlistItems).values({ playlistId: input.playlistId, contentId: input.contentId, sortOrder: 0 });
+    return { ok: true };
+  }),
+  removeFromPlaylist: publicProcedure.input(z.object({ playlistId: z.number().int().positive(), contentId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    const session = getAccessSession(ctx.req);
+    if (!session) throw new TRPCError({ code: "UNAUTHORIZED", message: "Your NFC session has expired." });
+    const db = await getDb();
+    if (!db) return { ok: true };
+    const owned = await db.select({ id: playlists.id }).from(playlists).where(and(eq(playlists.id, input.playlistId), eq(playlists.licenseId, session.licenseId))).limit(1);
+    if (!owned[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Playlist not found." });
+    await db.delete(playlistItems).where(and(eq(playlistItems.playlistId, input.playlistId), eq(playlistItems.contentId, input.contentId)));
+    return { ok: true };
+  }),
+  deletePlaylist: publicProcedure.input(z.object({ playlistId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    const session = getAccessSession(ctx.req);
+    if (!session) throw new TRPCError({ code: "UNAUTHORIZED", message: "Your NFC session has expired." });
+    const db = await getDb();
+    if (!db) return { ok: true };
+    const owned = await db.select({ id: playlists.id }).from(playlists).where(and(eq(playlists.id, input.playlistId), eq(playlists.licenseId, session.licenseId))).limit(1);
+    if (!owned[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Playlist not found." });
+    await db.delete(playlistItems).where(eq(playlistItems.playlistId, input.playlistId));
+    await db.delete(playlists).where(eq(playlists.id, input.playlistId));
     return { ok: true };
   }),
   myCard: publicProcedure.query(async ({ ctx }) => {
