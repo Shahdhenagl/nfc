@@ -10,32 +10,32 @@ export const PRODUCT_META: Record<ProductSlug, {
   description: string;
 }> = {
   foreign: {
-    name: "Foreign Music",
-    shortName: "Foreign",
+    name: "الموسيقى الأجنبية",
+    shortName: "أجنبية",
     type: "music",
     accent: "copper",
-    description: "A private shelf for new releases, chart favorites and the artists you keep close.",
+    description: "مكتبة خاصة للإصدارات الجديدة والأغاني المفضلة والفنانين الذين تحبهم.",
   },
   quran: {
-    name: "Quran & Azkar",
-    shortName: "Quran",
+    name: "القرآن والأذكار",
+    shortName: "القرآن",
     type: "quran",
     accent: "emerald",
-    description: "A calm, focused space for Quran recitation, daily azkar and ruqyah.",
+    description: "مساحة هادئة للتلاوات القرآنية والأذكار اليومية والرقية الشرعية.",
   },
   arabic: {
-    name: "Arabic Music — Tarab & Art",
-    shortName: "Arabic",
+    name: "الموسيقى العربية — الطرب والفن",
+    shortName: "عربية",
     type: "music",
     accent: "saffron",
-    description: "Tarab, classics and Arabic voices curated as a private listening room.",
+    description: "الطرب والكلاسيكيات وأجمل الأصوات العربية في مكتبة استماع خاصة.",
   },
   shaabi: {
-    name: "Shaabi Music",
-    shortName: "Shaabi",
+    name: "الموسيقى الشعبي",
+    shortName: "شعبي",
     type: "music",
     accent: "rose",
-    description: "Mahraganat, popular cuts and the songs making noise right now.",
+    description: "مهرجانات وأغاني شعبية وأحدث ما يستمع إليه الناس الآن.",
   },
 };
 

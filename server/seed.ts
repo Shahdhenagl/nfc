@@ -38,6 +38,8 @@ async function seed() {
     if (!productId) {
       const inserted = await db.insert(products).values({ slug, name: meta.name, type: meta.type, description: meta.description, status: "active" }).$returningId();
       productId = inserted[0].id;
+    } else {
+      await db.update(products).set({ name: meta.name, description: meta.description }).where(eq(products.id, productId));
     }
     const existing = await db.select().from(contentItems).where(eq(contentItems.productId, productId)).orderBy(contentItems.sortOrder);
     const mediaUrlFor = (index: number) => slug === "quran" && index < 2
